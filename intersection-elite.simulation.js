@@ -1,43 +1,72 @@
 console.log('intersection-elite.simulation.js running')
 
+const CAR_WIDTH = 30
+const CAR_HEIGHT = 50
+
 var body
 var svg
 var fpsDisplay
 var width = 600
 var height = 400
 var delta
-var rectsData = [
+var trafficData = {
+  cars: [
     {
-      cx: width / 2,
-      cy: height / 2,
-      width: 50,
-      height: 30,
-      rot: 30,
-      fill: '#8fd',
-    }, {
-      cx: width / 4,
-      cy: height / 4,
-      width: 60,
-      height: 40,
-      rot: 60,
-      fill: '#abc',
-    }, {
-      cx: 500,
-      cy: 150,
-      width: 20,
-      height: 80,
-      rot: 45,
-      fill: '#2f4',
+      x: 10,
+      y: 50,
+      angle: 30,
+      width: 30,
+      height: 50,
+
+      vel: 5,
+      turnAngle: 1,
+      acc: 1,
+      drag: 1
+    },
+    {
+      x: 400,
+      y: 200,
+      angle: -10,
+      width: 30,
+      height: 70,
+
+      vel: 10,
+      turnAngle: -0.5,
+      acc: 0.99,
+      drag: 1
     }
   ]
+}
+var cars
+const MAX_TURN_ANGLE = 1
+const MAX_VEL = 10
+const DEG2RAD = Math.PI / 180
 
-window.onload = main // starts code after window finish loading
-window.addEventListener('beforeunload', (e) => {
-  console.log('stopping')
-  rectsData[0].fill = '#000'
-  (e || window.event).returnValue = null
-  return null
-})
+window.onload = main // starts code after window finishes loading
+
+var Key = {
+  _pressed: {},
+
+  LEFT: 37,
+  UP: 38,
+  RIGHT: 39,
+  DOWN: 40,
+
+  isDown: function(keyCode) {
+    return this._pressed[keyCode]
+  },
+
+  onKeydown: function(event) {
+    this._pressed[event.keyCode] = true
+  },
+
+  onKeyup: function(event) {
+    delete this._pressed[event.keyCode]
+  }
+}
+
+window.addEventListener('keyup', (e) => { Key.onKeyup(e) }, false)
+window.addEventListener('keydown', (e) => { Key.onKeydown(e) }, false)
 
 var frameID
 var running = false
@@ -80,18 +109,20 @@ function main() {
     .style('fill', '#fff')
     .style('stroke', '#000')
 
-  fpsDisplay = svg.append('text')
-    .attr('x', 10)
-    .attr('y', 10)
-    .style('font-family', 'sans-serif')
-    .style('color', '#111')
-
-  requestAnimationFrame(mainLoop)
+  start()
 }
 
 function init() {
   console.log('initializing')
   setupSvg()
+  generateCars()
+
+  fpsDisplay = svg.append('text')
+    .attr('x', 10)
+    .attr('y', 20)
+    .style('font-family', 'sans-serif')
+    .style('fill', '#ddd')
+
   delta = 0
 }
 
@@ -106,6 +137,8 @@ var fps = TARGET_FPS
 var framesThisSecond = 0
 var lastFpsUpdate = 0
 
+// var count_ = 0
+
 function mainLoop(timestamp) {
 
   // could add begin() for input and loop setup
@@ -116,7 +149,7 @@ function mainLoop(timestamp) {
   if(timestamp > lastFpsUpdate + SECOND) { // updates every second
     fps = framesThisSecond
 
-    console.log(fps)
+    // console.log(fps)
     lastFpsUpdate = timestamp
     framesThisSecond = 0
   }
@@ -135,36 +168,64 @@ function mainLoop(timestamp) {
       break
     }
   }
-  console.log(numUpdateSteps)
+  // console.log(numUpdateSteps)
 
   draw()
 
   // could add end() for long running updates or cleanup
-
-  frameID = requestAnimationFrame(mainLoop)
+  if(running) {
+    frameID = requestAnimationFrame(mainLoop)
+  }
 }
 
 function update(timestep) {
   // console.log('.')
-  rectsData[0].cx += 1
+
+  if (Key.isDown(Key.UP)) trafficData.cars[0].acc = 2
+  else trafficData.cars[0].acc = 0
+  if (Key.isDown(Key.DOWN)) trafficData.cars[0].drag = 5
+  else trafficData.cars[0].drag = 1
+  if (Key.isDown(Key.RIGHT)) trafficData.cars[0].turnAngle += 0.05
+  else if (Key.isDown(Key.LEFT)) trafficData.cars[0].turnAngle -= 0.05
+  else trafficData.cars[0].turnAngle /= 2
+
+  for(let i = 0; i < trafficData.cars.length; i++) {
+    let car = trafficData.cars[i]
+    car.turnAngle = Math.max(-MAX_TURN_ANGLE, Math.min(car.turnAngle, MAX_TURN_ANGLE))
+
+    let angle = car.angle + car.turnAngle / 2
+    car.vel = Math.max(0, Math.min(car.vel + car.acc - car.drag, MAX_VEL))
+
+    car.x += Math.cos(angle * DEG2RAD - Math.PI / 2) * car.vel
+    car.y += Math.sin(angle * DEG2RAD - Math.PI / 2) * car.vel
+
+    car.angle += car.turnAngle * car.vel
+    while(car.angle >= 360) {
+      car.angle -= 360
+    }
+
+    // console.log(`${i}: ${JSON.stringify(car)}`)
+  }
+  // if(count_++ > 1000) {
+  //   stop()
+  // }
 }
 
 function draw() {
-  // console.log('drawing')
-  var rects = svg.selectAll('rect')
-    .data(rectsData)
-    .enter()
-    .append('rect')
-    .attr('x', (d) => { return d.cx - d.width / 2 })
-    .attr('y', (d) => { return d.cy - d.height / 2 })
+  // console.log('draw():')
+  // svg.remove()
+  // svg = d3.selectAll('body').append('svg')
+  // console.log(cars)
+  cars
+    .attr('x', (d) => { return d.x - d.width / 2 })
+    .attr('y', (d) => { return d.y - d.height / 2 })
     .attr('width', (d) => { return d.width })
     .attr('height', (d) => { return d.height })
-    .style('fill', (d) => { return d.fill })
-    .attr('transform', (d) => { return 'rotate(' + d.rot + ' ' + d.cx + ' ' + d.cy + ')' })
+    .style('fill', (d) => { return '#ddd' })
+    .attr('transform', (d) => { return 'rotate(' + d.angle + ' ' + d.x + ' ' + d.y + ')' })
 
-  rects.exit().remove()
+  // console.log(cars.size())
 
-  // TODO: make this work
   fpsDisplay.text(fps)
 }
 
@@ -182,6 +243,19 @@ function setupSvg() {
     .attr('viewBox', '0 0 ' + width + ' ' + height)
     .classed('svg-content-responsive', true) // class to make svg responsive
     .style('background-color', '#333')
+}
+
+function generateCars() {
+  cars = svg.selectAll('rect')
+    .data(trafficData.cars)
+    .enter()
+    .append('rect')
+    // .attr('x', (d) => { return d.x - d.width / 2 })
+    // .attr('y', (d) => { return d.y - d.height / 2 })
+    // .attr('width', (d) => { return d.width })
+    // .attr('height', (d) => { return d.height })
+    // .style('fill', (d) => { return '#ddd' })
+    // .attr('transform', (d) => { return 'rotate(' + d.angle + ' ' + d.x + ' ' + d.y + ')' })
 }
 
 // This polyfill is adapted from the MIT-licensed
